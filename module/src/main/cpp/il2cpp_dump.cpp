@@ -16,6 +16,13 @@
 #include "log.h"
 #include "il2cpp-tabledefs.h"
 #include "il2cpp-class.h"
+#include <map>
+
+//#include <il2cpp-api.h>
+#include <iostream>
+#include <fstream>
+#include <locale>
+#include <codecvt>
 
 #define DO_API(r, n, p) r (*n) p
 
@@ -343,16 +350,132 @@ void il2cpp_api_init(void *handle) {
     il2cpp_thread_attach(domain);
 }
 
+std::string Il2CppStringToStdString(Il2CppString *str) {
+    if (str == nullptr) {
+        return "";
+    }
+
+    // Get Il2CppChar* (UTF-16)
+    const Il2CppChar *il2cppChars = il2cpp_string_chars(str);
+    size_t length = il2cpp_string_length(str);
+
+    // Convert to std::wstring
+    std::wstring wstr(il2cppChars, il2cppChars + length);
+
+    // Convert wide string to UTF-8 string
+    std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+    return converter.to_bytes(wstr);
+}
+
+std::string decryptData(Il2CppClass *klass, const std::string &base64Encrypted, bool isUseLocalKey) {
+    if (!klass) {
+        LOGD("Class TSCrypto not found.");
+        return "";
+    }
+
+    // Get the method (DecryptData, 2 parameters)
+    const MethodInfo *method = il2cpp_class_get_method_from_name(klass, "DecryptData", 2);
+    if (!method) {
+        LOGD("Method DecryptData not found.\n");
+        return "";
+    }
+
+    // Prepare parameters
+    void *args[2];
+    args[0] = il2cpp_string_new(base64Encrypted.c_str());  // First argument (string)
+    args[1] = &isUseLocalKey;                              // Second argument (bool)
+
+    // Call the static method
+    Il2CppException *exception = nullptr;
+    Il2CppObject *result = il2cpp_runtime_invoke(method, nullptr, args, &exception);
+
+    if (exception) {
+        return "";
+    }
+
+    // Convert Il2CppString* to std::string
+    Il2CppString *resultString = reinterpret_cast<Il2CppString *>(result);
+    if (resultString) {
+        auto logString = Il2CppStringToStdString(resultString);
+//        LOGD("Done %s", logString.c_str());
+        return Il2CppStringToStdString(resultString);
+    }
+
+    return "";
+}
+
+void dumpToFile(const char *outDir, std::string outFile, std::string imageOutput) {
+    auto outPath = std::string(outDir).append(outFile);
+    LOGI("Dump file %s", outPath.c_str());
+    std::ofstream outStream(outPath);
+    outStream << imageOutput.c_str();
+    outStream.close();
+    LOGI("Dump done!");
+}
+
+namespace fs = std::filesystem;
+
+std::string readFromFilesInFolder(const char *outDir, Il2CppClass *klass, const std::string &fileNames)
+{
+    std::ostringstream content;
+//    auto outPath = std::string(outDir) + "/";
+    auto outPath = std::string(outDir).append(fileNames);
+
+    // Assume fileNames is a comma-separated list of file names
+//    std::istringstream fileStream(fileNames);
+//    std::string fileName;
+
+//    auto filePath = outPath + fileName;
+    LOGI("Reading file %s", outPath.c_str());
+    for (const auto & entry : fs::directory_iterator(outPath)) {
+        LOGI("Reading file %s", entry.path().c_str());
+        auto  filePath = entry.path();
+        if (fs::exists(filePath)) {
+            LOGI("Reading file %s", filePath.c_str());
+            std::ifstream inFile(filePath);
+            if (inFile) {
+                std::ostringstream buffer;
+                buffer << inFile.rdbuf();
+                auto result = decryptData(klass, buffer.str(), true);
+                auto resultPath =  std::string("/files/JsonAsset/").append(entry.path().filename()).append(".json");
+                dumpToFile(outDir, resultPath, result);
+//                content << buffer.str() << "\n";
+            } else {
+                LOGI("Failed to open file %s", filePath.c_str());
+            }
+        } else {
+            LOGI("File does not exist: %s", filePath.c_str());
+        }
+    }
+
+    return "";
+}
+
+void startDecryptData(const char *outDir, Il2CppClass *klass)
+{
+    readFromFilesInFolder(outDir,klass, "/files/TextAsset/");
+//    std::string base64Encrypted = "";
+//    auto result = decryptData(klass, base64Encrypted, true);
+//    dumpToFile(outDir, "/files/JsonAsset/dump1.json", result);
+//
+//    base64Encrypted = "";
+//
+//    auto result2 = decryptData(klass, base64Encrypted, true);
+//    dumpToFile(outDir, "/files/JsonAsset/dump2.json", result2);
+}
+
 void il2cpp_dump(const char *outDir) {
     LOGI("dumping...");
     size_t size;
     auto domain = il2cpp_domain_get();
     auto assemblies = il2cpp_domain_get_assemblies(domain, &size);
     std::stringstream imageOutput;
+
     for (int i = 0; i < size; ++i) {
         auto image = il2cpp_assembly_get_image(assemblies[i]);
         imageOutput << "// Image " << i << ": " << il2cpp_image_get_name(image) << "\n";
     }
+
     std::vector<std::string> outPuts;
     if (il2cpp_image_get_class) {
         LOGI("Version greater than 2018.3");
@@ -365,7 +488,19 @@ void il2cpp_dump(const char *outDir) {
             for (int j = 0; j < classCount; ++j) {
                 auto klass = il2cpp_image_get_class(image, j);
                 auto type = il2cpp_class_get_type(const_cast<Il2CppClass *>(klass));
-                //LOGD("type name : %s", il2cpp_type_get_name(type));
+                auto name = il2cpp_type_get_name(type);
+
+                if (strcmp(name, "Tikitaka.TSCrypto") == 0) {
+//                    LOGD("type name : %s 2", il2cpp_type_get_name(type));
+                    // Get the class from the image (namespace and class name)
+                    auto klass2 = il2cpp_class_from_name(image, "Tikitaka", "TSCrypto");
+                    if (!klass2) {
+                        LOGD("Class not found");
+                    }
+
+                    startDecryptData(outDir, klass2);
+                }
+
                 auto outPut = imageStr.str() + dump_type(type);
                 outPuts.push_back(outPut);
             }
