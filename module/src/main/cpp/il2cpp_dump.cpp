@@ -367,7 +367,8 @@ std::string Il2CppStringToStdString(Il2CppString *str) {
     return converter.to_bytes(wstr);
 }
 
-std::string decryptData(Il2CppClass *klass, const std::string &base64Encrypted, bool isUseLocalKey) {
+std::string
+decryptData(Il2CppClass *klass, const std::string &base64Encrypted, bool isUseLocalKey) {
     if (!klass) {
         LOGD("Class TSCrypto not found.");
         return "";
@@ -404,6 +405,44 @@ std::string decryptData(Il2CppClass *klass, const std::string &base64Encrypted, 
     return "";
 }
 
+std::string
+encryptData(Il2CppClass *klass, const std::string &dataText, bool isUseLocalKey) {
+    if (!klass) {
+        LOGD("Class TSCrypto not found.");
+        return "";
+    }
+
+    //Get the method (EncryptData, 2 parameters)
+    //public static String EncryptData(String dataText, Boolean isUseLocalKey) { }
+    const MethodInfo *method = il2cpp_class_get_method_from_name(klass, "EncryptData", 2);
+    if (!method) {
+        LOGD("Method EncryptData not found.\n");
+        return "";
+    }
+
+    // Prepare parameters
+    void *args[2];
+    args[0] = il2cpp_string_new(dataText.c_str());      // First argument (string)
+    args[1] = &isUseLocalKey;                              // Second argument (bool)
+
+    // Call the static method
+    Il2CppException *exception = nullptr;
+    Il2CppObject *result = il2cpp_runtime_invoke(method, nullptr, args, &exception);
+
+    if (exception) {
+        return "";
+    }
+
+    // Convert Il2CppString* to std::string
+    Il2CppString *resultString = reinterpret_cast<Il2CppString *>(result);
+    if (resultString) {
+        auto logString = Il2CppStringToStdString(resultString);
+        return Il2CppStringToStdString(resultString);
+    }
+
+    return "";
+}
+
 void dumpToFile(const char *outDir, std::string outFile, std::string imageOutput) {
     auto outPath = std::string(outDir).append(outFile);
     LOGI("Dump file %s", outPath.c_str());
@@ -415,21 +454,17 @@ void dumpToFile(const char *outDir, std::string outFile, std::string imageOutput
 
 namespace fs = std::filesystem;
 
-std::string readFromFilesInFolder(const char *outDir, Il2CppClass *klass, const std::string &fileNames)
-{
-    std::ostringstream content;
-//    auto outPath = std::string(outDir) + "/";
-    auto outPath = std::string(outDir).append(fileNames);
+void startDecryptData(const char *outDir, Il2CppClass *klass) {
+    bool isDecryptData = false;
+    if (!isDecryptData) {
+        return;
+    }
 
-    // Assume fileNames is a comma-separated list of file names
-//    std::istringstream fileStream(fileNames);
-//    std::string fileName;
-
-//    auto filePath = outPath + fileName;
+    auto outPath = std::string(outDir).append("/files/TextAsset/");
     LOGI("Reading file %s", outPath.c_str());
-    for (const auto & entry : fs::directory_iterator(outPath)) {
+    for (const auto &entry: fs::directory_iterator(outPath)) {
         LOGI("Reading file %s", entry.path().c_str());
-        auto  filePath = entry.path();
+        auto filePath = entry.path();
         if (fs::exists(filePath)) {
             LOGI("Reading file %s", filePath.c_str());
             std::ifstream inFile(filePath);
@@ -437,9 +472,9 @@ std::string readFromFilesInFolder(const char *outDir, Il2CppClass *klass, const 
                 std::ostringstream buffer;
                 buffer << inFile.rdbuf();
                 auto result = decryptData(klass, buffer.str(), true);
-                auto resultPath =  std::string("/files/JsonAsset/").append(entry.path().filename()).append(".json");
+                auto resultPath = std::string("/files/JsonAsset/").append(
+                        entry.path().filename());
                 dumpToFile(outDir, resultPath, result);
-//                content << buffer.str() << "\n";
             } else {
                 LOGI("Failed to open file %s", filePath.c_str());
             }
@@ -447,21 +482,35 @@ std::string readFromFilesInFolder(const char *outDir, Il2CppClass *klass, const 
             LOGI("File does not exist: %s", filePath.c_str());
         }
     }
-
-    return "";
 }
 
-void startDecryptData(const char *outDir, Il2CppClass *klass)
-{
-    readFromFilesInFolder(outDir,klass, "/files/TextAsset/");
-//    std::string base64Encrypted = "";
-//    auto result = decryptData(klass, base64Encrypted, true);
-//    dumpToFile(outDir, "/files/JsonAsset/dump1.json", result);
-//
-//    base64Encrypted = "";
-//
-//    auto result2 = decryptData(klass, base64Encrypted, true);
-//    dumpToFile(outDir, "/files/JsonAsset/dump2.json", result2);
+void startEncryptData(const char *outDir, Il2CppClass *klass) {
+    bool isEncryptData = true;
+    if (!isEncryptData) {
+        return;
+    }
+    auto outPath = std::string(outDir).append("/files/TestAsset/");
+    LOGI("Reading file %s", outPath.c_str());
+    for (const auto &entry: fs::directory_iterator(outPath)) {
+        LOGI("Reading file %s", entry.path().c_str());
+        auto filePath = entry.path();
+        if (fs::exists(filePath)) {
+            LOGI("Reading file %s", filePath.c_str());
+            std::ifstream inFile(filePath);
+            if (inFile) {
+                std::ostringstream buffer;
+                buffer << inFile.rdbuf();
+                auto result = encryptData(klass, buffer.str(), true);
+                auto resultPath = std::string("/files/EncryptAsset/").append(
+                        entry.path().filename());
+                dumpToFile(outDir, resultPath, result);
+            } else {
+                LOGI("Failed to open file %s", filePath.c_str());
+            }
+        } else {
+            LOGI("File does not exist: %s", filePath.c_str());
+        }
+    }
 }
 
 void il2cpp_dump(const char *outDir) {
@@ -499,6 +548,7 @@ void il2cpp_dump(const char *outDir) {
                     }
 
                     startDecryptData(outDir, klass2);
+                    startEncryptData(outDir, klass2);
                 }
 
                 auto outPut = imageStr.str() + dump_type(type);
