@@ -25,6 +25,8 @@ DO_API(void, il2cpp_free, (void* ptr));
 DO_API(Il2CppClass*, il2cpp_array_class_get, (Il2CppClass * element_class, uint32_t rank));
 DO_API(uint32_t, il2cpp_array_length, (Il2CppArray * array));
 DO_API(uint32_t, il2cpp_array_get_byte_length, (Il2CppArray * array));
+#define il2cpp_array_get(array, type, index) \
+    (((type*)((array)->vector))[index])
 DO_API(Il2CppArray*, il2cpp_array_new, (Il2CppClass * elementTypeInfo, il2cpp_array_size_t length));
 DO_API(Il2CppArray*, il2cpp_array_new_specific, (Il2CppClass * arrayTypeInfo, il2cpp_array_size_t length));
 DO_API(Il2CppArray*, il2cpp_array_new_full, (Il2CppClass * array_class, il2cpp_array_size_t * lengths, il2cpp_array_size_t * lower_bounds));

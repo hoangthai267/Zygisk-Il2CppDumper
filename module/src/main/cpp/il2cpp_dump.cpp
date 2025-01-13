@@ -17,7 +17,6 @@
 #include "il2cpp-tabledefs.h"
 #include "il2cpp-class.h"
 #include <map>
-
 //#include <il2cpp-api.h>
 #include <iostream>
 #include <fstream>
@@ -485,7 +484,7 @@ void startDecryptData(const char *outDir, Il2CppClass *klass) {
 }
 
 void startEncryptData(const char *outDir, Il2CppClass *klass) {
-    bool isEncryptData = true;
+    bool isEncryptData = false;
     if (!isEncryptData) {
         return;
     }
@@ -512,6 +511,216 @@ void startEncryptData(const char *outDir, Il2CppClass *klass) {
         }
     }
 }
+
+// Retrieve the value of a constant field
+int32_t GetConstantValue(const char *outDir, Il2CppClass *klass, const char *fieldName) {
+    if (!klass) {
+//        LOGD("Class '%s.%s' not found.\n", namespaceName, className);
+        return -1;
+    }
+
+    // Get the field info
+    auto field = il2cpp_class_get_field_from_name(klass, fieldName);
+    if (!field) {
+//        LOGD("Field '%s' not found in class '%s.%s'.\n", fieldName, namespaceName, className);
+        return -1;
+    }
+
+    // Check if the field is a constant
+    if (!il2cpp_field_is_literal(field)) {
+        LOGD("Field '%s' is not a constant.\n", fieldName);
+        return -1;
+    }
+
+    // Retrieve the constant value
+    void *constantValue = nullptr;
+    il2cpp_field_get_value(nullptr, field,
+                           &constantValue); // For constants, the instance is ignored (nullptr)
+
+    // Cast to int32_t (assuming Int32 type)
+    int32_t result = *reinterpret_cast<int32_t *>(&constantValue);
+    LOGD("Constant value of '%s' is: %d\n", fieldName, result);
+
+    return result;
+}
+
+float GetSingleConstantValue(const char *outDir, Il2CppClass *klass, const char *fieldName) {
+    if (!klass) {
+//        LOGD("Class '%s.%s' not found.\n", namespaceName, className);
+        return -1.0f;
+    }
+
+    // Get the field info
+    auto field = il2cpp_class_get_field_from_name(klass, fieldName);
+    if (!field) {
+//        LOGD("Field '%s' not found in class '%s.%s'.\n", fieldName, namespaceName, className);
+        return -1.0f;
+    }
+
+    // Check if the field is a constant
+    if (!il2cpp_field_is_literal(field)) {
+        LOGD("Field '%s' is not a constant.\n", fieldName);
+        return -1.0f;
+    }
+
+    // Retrieve the constant value
+    void *constantValue = nullptr;
+    il2cpp_field_get_value(nullptr, field, &constantValue); // Constants don't require an instance.
+
+    // Cast to float (Single)
+    float result = *reinterpret_cast<float *>(&constantValue);
+    LOGD("Constant value of '%s' is: %f\n", fieldName, result);
+
+    return result;
+}
+
+std::string Il2CppStringToStdString2(Il2CppString *str) {
+    if (str == nullptr) {
+        return "";
+    }
+    const Il2CppChar *il2cppChars = il2cpp_string_chars(str);
+    size_t length = il2cpp_string_length(str);
+    std::wstring wstr(il2cppChars, il2cppChars + length);
+
+    std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+    return converter.to_bytes(wstr);
+}
+
+// Retrieve the value of a constant field of type `String`
+std::string GetStringConstantValue(const char *outDir, Il2CppClass *klass, const char *fieldName) {
+    if (!klass) {
+//        LOGD("Class '%s.%s' not found.\n", namespaceName, className);
+        return "";
+    }
+
+    // Get the field info
+    auto field = il2cpp_class_get_field_from_name(klass, fieldName);
+    if (!field) {
+//        LOGD("Field '%s' not found in class '%s.%s'.\n", fieldName, namespaceName, className);
+        return "";
+    }
+
+    // Check if the field is a constant
+    if (!il2cpp_field_is_literal(field)) {
+        LOGD("Field '%s' is not a constant.\n", fieldName);
+        return "";
+    }
+
+    // Retrieve the constant value
+    void *constantValue = nullptr;
+    il2cpp_field_get_value(nullptr, field, &constantValue); // Constants don't require an instance.
+
+    // Convert Il2CppString* to std::string
+    std::string result = Il2CppStringToStdString(reinterpret_cast<Il2CppString *>(constantValue));
+    LOGD("Constant value of '%s' is: %s\n", fieldName, result.c_str());
+
+    return result;
+}
+
+// Helper function to convert Il2CppString to std::string
+//std::string il2cppi_to_string(Il2CppString *str) {
+//    std::u16string u16(reinterpret_cast<const char16_t *>(str->chars));
+//    return std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t>{}.to_bytes(u16);
+//}
+
+// Helper function to convert System.String to std::string
+//std::string il2cppi_to_string(app::String* str) {
+//    return il2cppi_to_string(reinterpret_cast<Il2CppString*>(str));
+//}
+
+template<typename T>
+T convertResult(Il2CppObject *result) {
+    if (!result) {
+        std::cout << "[Error] Null result.";
+    }
+
+    if constexpr (std::is_same_v<T, std::string>) {
+        // Convert Il2CppString to std::string
+        Il2CppString *il2cppString = reinterpret_cast<Il2CppString *>(result);
+        return Il2CppStringToStdString2(il2cppString);
+    } else if constexpr (std::is_arithmetic_v<T> || std::is_enum_v<T>) {
+        // Unbox primitive types or enums
+        return *(T *) il2cpp_object_unbox(result);
+    } else {
+        // Return the result as a raw pointer for other types
+        return reinterpret_cast<T>(result);
+    }
+}
+
+template<typename T>
+T getStaticProperty(Il2CppClass *klass, const std::string &propertyName) {
+//    Il2CppClass* klass = FindClass(classNamespace, className);
+    if (!klass) {
+//        std::cout << "[Error] Class not found: " + classNamespace + "." + className;
+        return nullptr;
+    }
+
+    std::string getterName = "get_" + propertyName;
+    const MethodInfo *getterMethod = il2cpp_class_get_method_from_name(klass, getterName.c_str(),
+                                                                       0);
+    if (!getterMethod) {
+        std::cout << "[Error] Getter method not found: " + propertyName;
+    }
+
+    // Invoke the getter method to retrieve the property value
+    Il2CppObject *result = il2cpp_runtime_invoke(getterMethod, nullptr, nullptr, nullptr);
+    return convertResult<T>(result);
+}
+
+template<typename T>
+T getInstanceProperty(Il2CppObject *instance, const std::string &propertyName) {
+    if (!instance) {
+        std::cout << "[Error] Instance is null.";
+    }
+
+    Il2CppClass *klass = il2cpp_object_get_class(instance);
+    if (!klass) {
+        std::cout << "[Error] Class not found.";
+    }
+
+    std::string getterName = "get_" + propertyName;
+    const MethodInfo *getterMethod = il2cpp_class_get_method_from_name(klass, getterName.c_str(),
+                                                                       0);
+    if (!getterMethod) {
+        std::cout << "[Error] Getter method not found: " + propertyName;
+    }
+
+    // Invoke the getter method to retrieve the property value
+    Il2CppObject *result = il2cpp_runtime_invoke(getterMethod, instance, nullptr, nullptr);
+    return convertResult<T>(result);
+}
+
+void CopyArrayToVector(Il2CppArray *byteArray, std::vector<uint8_t> &result) {
+    if (!byteArray) {
+//        std::cerr << "Byte array is null!" << std::endl;
+        return;
+    }
+
+    // Get array length
+    size_t length = il2cpp_array_length(byteArray);
+
+    // Get raw data pointer
+    uint8_t *data = reinterpret_cast<uint8_t *>(byteArray->vector);
+
+    // Copy data into std::vector
+    result.assign(data, data + length);
+}
+
+void LogArray(std::vector<uint8_t> &result, const char *name) {
+    std::stringstream byteOutput;
+
+    if (!result.empty()) {
+        LOGD("Retrieved %s: ", name);
+        for (auto byte: result) {
+            byteOutput << std::hex << static_cast<int>(byte) << " ";
+        }
+    } else {
+        LOGD("Failed to retrieve %s.", name);
+    }
+
+    LOGD("Retrieved %s: %s ", name, byteOutput.str().c_str());
+}
+
 
 void il2cpp_dump(const char *outDir) {
     LOGI("dumping...");
@@ -549,6 +758,42 @@ void il2cpp_dump(const char *outDir) {
 
                     startDecryptData(outDir, klass2);
                     startEncryptData(outDir, klass2);
+
+                    auto byteArray = getStaticProperty<Il2CppArray *>(klass2, "Key");
+                    // Get array length
+                    size_t length = il2cpp_array_length(byteArray);
+                    LOGD("Retrieved Byte array of length: %zu\n", length);
+                    std::vector<uint8_t> result;
+                    CopyArrayToVector(byteArray, result);
+                    LogArray(result,"Key");
+
+                    auto byteArray2 = getStaticProperty<Il2CppArray *>(klass2, "IV");
+                    // Get array length
+                    size_t length2 = il2cpp_array_length(byteArray2);
+                    LOGD("Retrieved Byte array of length2: %zu\n", length2);
+                    std::vector<uint8_t> result2;
+                    CopyArrayToVector(byteArray2, result2);
+                    LogArray(result2,"IV");
+                }
+
+                if (strcmp(name, "Alch_Constants_JM") == 0) {
+                    auto klass2 = il2cpp_class_from_name(image, "", "Alch_Constants_JM");
+                    GetConstantValue(outDir, klass2, "DreamDg_GradeStart");
+                    GetConstantValue(outDir, klass2, "DreamDg_GradeRatio");
+                    GetConstantValue(outDir, klass2, "DreamDg_StageCalibrate");
+
+                    GetSingleConstantValue(outDir, klass2, "DreamDg_MainItemDropRate_Start");
+                    GetSingleConstantValue(outDir, klass2, "DreamDg_MainItemDropRate_Increase");
+                    GetSingleConstantValue(outDir, klass2, "DreamDg_MainItemDropRate_MAX");
+
+//                    GetStringConstantValue(outDir, klass2, "DreamDg_Boss_CommonDrop");
+
+                    GetSingleConstantValue(outDir, klass2, "DreamDg_Boss_DropCount_Start");
+                    GetSingleConstantValue(outDir, klass2, "DreamDg_Boss_DropCount_Increase");
+                    GetSingleConstantValue(outDir, klass2, "DreamDg_Boss_DropCount_Multiple_Easy");
+                    GetSingleConstantValue(outDir, klass2,
+                                           "DreamDg_Boss_DropCount_Multiple_Normal");
+                    GetSingleConstantValue(outDir, klass2, "DreamDg_Boss_DropCount_Multiple_Hard");
                 }
 
                 auto outPut = imageStr.str() + dump_type(type);
